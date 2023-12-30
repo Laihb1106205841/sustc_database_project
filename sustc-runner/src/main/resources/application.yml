@@ -1,0 +1,20 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/sustc  # change this to your own jdbc url
+    username: bilibili  # change this to your own username (avoid using a superuser)
+    password: 123456  # change this to your own password
+
+    hikari:
+      connection-timeout: 180000
+      leak-detection-threshold: 120000
+
+logging:
+  level:
+    root: off
+    io.sustc: debug
+
+---
+
+benchmark:
+  data-path: data/small_data
+  student-mode: true
