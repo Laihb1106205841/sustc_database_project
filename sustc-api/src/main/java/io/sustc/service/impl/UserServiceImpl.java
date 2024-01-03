@@ -10,8 +10,11 @@ import io.sustc.service.UserService;
 import io.sustc.service.ValidationCheck.UserValidationCheck;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.asm.Type;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.Resource;
+import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -30,19 +33,16 @@ import static io.sustc.service.ValidationCheck.UserValidationCheck.HasResultAndS
 @Service
 @Slf4j
 public class UserServiceImpl implements UserService {
-//    @Autowired
-    private SQLDataSource dataSource;
+    @Resource
+    private DataSource dataSource;
 
     public UserServiceImpl(){
-        dataSource = new SQLDataSource(10);
+//        dataSource = new SQLDataSource("jdbc:postgresql://localhost:5432/sustc",
+//                "bilibili",10);
     }
 
 
-    /**
-     * Delete Account
-     * finish
-     * insert table: b_user
-     * */
+
 
     static String RegisterSQL =
             "INSERT INTO " +
@@ -58,12 +58,31 @@ public class UserServiceImpl implements UserService {
             //coin  default 0
     static String GenerateMidSQL = "SELECT max(mid)+1 from b_user";
 
+    /**
+     * AC
+     * */
     @Override
     public long register(RegisterUserReq req){
-        try ( var con = dataSource.getSQLConnection()){
+        if(req.getPassword()==null){
+//            log.info("no password");
+            return -1;}
+        if(req.getName()==null){
+//            log.info("non ame");
+            return -1;}
+        if(req.getSex()==null){return -1;}
+
+        try ( var con = dataSource.getConnection()){
             if(!UserValidationCheck.checkBirthday(req.getBirthday())){
-                log.info("birthday");
+//                log.info("birthday");
 //                System.out.println(5);
+                con.close();
+                return -1;}
+            if(req.getName().isEmpty()){
+//                log.info("name");
+                con.close();
+                return -1;}
+            if(req.getPassword().isEmpty()){
+                con.close();
                 return -1;}
 
             PreparedStatement stm1 = con.prepareStatement(GenerateMidSQL);
@@ -108,12 +127,17 @@ public class UserServiceImpl implements UserService {
                 // 在这里获取数据，例如：
                 mid = resultSet.getLong(1);
             }
-
-            resultSet.next();
+//
+//            resultSet.next();
             long newId = Math.max(mid,1);
             stmt.setLong(9,newId);
 
             stmt.executeUpdate();
+
+            stmt.close();
+            stm1.close();
+            con.close();
+
 //            System.out.println(7);
 
 //            long generatedMid = -1;
@@ -129,8 +153,9 @@ public class UserServiceImpl implements UserService {
 
             return newId;
         } catch (SQLException e) {
+            log.info(e.toString());
 //            throw new ConnectionToDatabaseException(e);
-            log.info("SQL");
+            log.info("SQL in register");
             return -1;
         }
     }
@@ -142,9 +167,12 @@ public class UserServiceImpl implements UserService {
     /**
      * Delete Account
      * finish
-     * TODO: waijian and jilian, try to not use them
      * */
-
+    @Resource
+    private DataSource dataSource1;
+    /**
+     * AC
+     * */
     @Override
     public boolean deleteAccount(AuthInfo auth, long mid){
 
@@ -158,7 +186,7 @@ public class UserServiceImpl implements UserService {
         String iden = null;
 
         String select = "select identity from b_user where mid = ?";
-        try (Connection con = dataSource.getSQLConnection()){
+        try (Connection con = dataSource.getConnection()){
             PreparedStatement stmt = con.prepareStatement(select);
             stmt.setLong(1,mid);
             ResultSet resultSet = stmt.executeQuery();
@@ -174,7 +202,7 @@ public class UserServiceImpl implements UserService {
         //valid
         if((identity.equals("USER") && oaMessage.getMid()==mid )
                 ||(identity.equals("SUPERUSER") )){
-            Connection con = null;
+//            Connection con = null;
             String GoToHistory =
                     "INSERT INTO history_user " +
                             "(mid, name, sex, birthday, " +
@@ -197,10 +225,50 @@ public class UserServiceImpl implements UserService {
 
             String deleteAccount = "DELETE from b_user where mid = ?";
 
-            //                con = dataSource.getSQLConnection();
-//                con.setAutoCommit(false);
+            try (var con = dataSource.getConnection()){
+                con.setAutoCommit(false);
 
 //                PreparedStatement stmt = con.prepareStatement(GoToHistory);
+                PreparedStatement stmt = con.prepareStatement(deleteAccount);
+                stmt.setLong(1,mid);
+                stmt.addBatch();
+                stmt = con.prepareStatement(deleteDanmu);
+                stmt.setLong(1,mid);
+                stmt.addBatch();
+                stmt = con.prepareStatement(deleteVideo);
+                stmt.setLong(1,mid);
+                stmt.addBatch();
+                stmt = con.prepareStatement(deleteFollowing);
+                stmt.setLong(1,mid);
+                stmt.addBatch();
+                stmt = con.prepareStatement(deleteFollower);
+                stmt.setLong(1,mid);
+                stmt.addBatch();
+
+                stmt = con.prepareStatement(deleteUserWatchVideo);
+                stmt.setLong(1,mid);
+                stmt.addBatch();
+                stmt = con.prepareStatement(deleteDanmuLike);
+                stmt.setLong(1,mid);
+                stmt.addBatch();
+                stmt = con.prepareStatement(deleteCoinVideo);
+                stmt.setLong(1,mid);
+                stmt.addBatch();
+                stmt = con.prepareStatement(deleteCollectVideo);
+                stmt.setLong(1,mid);
+                stmt.addBatch();
+                stmt = con.prepareStatement(deleteLikeVideo);
+                stmt.setLong(1,mid);
+                stmt.addBatch();
+
+                stmt.executeBatch();
+                con.commit();
+                con.setAutoCommit(true);
+
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+
 //                stmt.setLong(1,oaMessage.getMid());
 //                stmt.setString(2,oaMessage.getName());
 //                stmt.setString(3, String.valueOf(oaMessage.getSex()));
@@ -224,61 +292,30 @@ public class UserServiceImpl implements UserService {
 //                stmt.executeUpdate();
 
 //                PreparedStatement stmt = null;
-            ExecutorService executorService = Executors.newFixedThreadPool(8);
+//            ExecutorService executorService = Executors.newFixedThreadPool(10);
+//
+//            executorService.submit(() -> executeDeleteOperation(deleteAccount, mid));
+//
+//            executorService.submit(() -> executeDeleteOperation(deleteDanmuLike, mid));
+//            executorService.submit(() -> executeDeleteOperation(deleteCoinVideo, mid));
+//            executorService.submit(() -> executeDeleteOperation(deleteCollectVideo, mid));
+//            executorService.submit(() -> executeDeleteOperation(deleteLikeVideo, mid));
+//
+//            executorService.submit(() -> executeDeleteOperation(deleteDanmu, mid));
+//            executorService.submit(() -> executeDeleteOperation(deleteVideo, mid));
+//            executorService.submit(() -> executeDeleteOperation(deleteFollowing, mid));
+//            executorService.submit(() -> executeDeleteOperation(deleteFollower, mid));
+//            executorService.submit(() -> executeDeleteOperation(deleteUserWatchVideo, mid));
 
-            executorService.submit(() -> executeDeleteOperation(deleteAccount, mid));
-
-            executorService.submit(() -> executeDeleteOperation(deleteDanmuLike, mid));
-            executorService.submit(() -> executeDeleteOperation(deleteCoinVideo, mid));
-            executorService.submit(() -> executeDeleteOperation(deleteCollectVideo, mid));
-            executorService.submit(() -> executeDeleteOperation(deleteLikeVideo, mid));
-
-            executorService.submit(() -> executeDeleteOperation(deleteDanmu, mid));
-            executorService.submit(() -> executeDeleteOperation(deleteVideo, mid));
-            executorService.submit(() -> executeDeleteOperation(deleteFollowing, mid));
-            executorService.submit(() -> executeDeleteOperation(deleteFollower, mid));
-            executorService.submit(() -> executeDeleteOperation(deleteUserWatchVideo, mid));
-//                stmt = con.prepareStatement(deleteAccount);
-//                stmt.setLong(1,mid);
-//                stmt.executeUpdate();
-//                stmt = con.prepareStatement(deleteDanmu);
-//                stmt.setLong(1,mid);
-//                stmt.executeUpdate();
-//                stmt = con.prepareStatement(deleteVideo);
-//                stmt.setLong(1,mid);
-//                stmt.executeUpdate();
-//                stmt = con.prepareStatement(deleteFollowing);
-//                stmt.setLong(1,mid);
-//                stmt.executeUpdate();
-//                stmt = con.prepareStatement(deleteFollower);
-//                stmt.setLong(1,mid);
-//                stmt.executeUpdate();
 //
 //
-//                stmt = con.prepareStatement(deleteUserWatchVideo);
-//                stmt.setLong(1,mid);
-//                stmt.executeUpdate();
-//                stmt = con.prepareStatement(deleteDanmuLike);
-//                stmt.setLong(1,mid);
-//                stmt.executeUpdate();
-//                stmt = con.prepareStatement(deleteCoinVideo);
-//                stmt.setLong(1,mid);
-//                stmt.executeUpdate();
-//                stmt = con.prepareStatement(deleteCollectVideo);
-//                stmt.setLong(1,mid);
-//                stmt.executeUpdate();
-//                stmt = con.prepareStatement(deleteLikeVideo);
-//                stmt.setLong(1,mid);
-//                stmt.executeUpdate();
-
-//                con.commit();
 
             //数据库，我真的好讨厌你啊！！！天天报错，哈基米！！！
 
 
 //                stmt.close();
 //                con.close();
-
+//
 //                con.setAutoCommit(false);
 //                PreparedStatement stm1 = con.prepareStatement(deleteAccount);
 //                stm1.setLong(1,mid);
@@ -293,10 +330,12 @@ public class UserServiceImpl implements UserService {
     }
 
     private void executeDeleteOperation(String query, long mid) {
-        try (Connection con = dataSource.getSQLConnection()) {
+        try (Connection con = dataSource1.getConnection()) {
             try (PreparedStatement stmt = con.prepareStatement(query)) {
                 stmt.setLong(1, mid);
                 stmt.executeUpdate();
+                stmt.close();
+                con.close();
             }
         } catch (SQLException e) {
             e.printStackTrace();
@@ -306,12 +345,21 @@ public class UserServiceImpl implements UserService {
     /**
      * Follow Account
      * finish
+     * AC
      * */
     @Override
     public boolean follow(AuthInfo auth, long followeeMid){
         if(followeeMid<=0){return false;}
+
+        //check OA
         OAMessage oaMessage = checkAuthInvalid(auth);
-        if(!oaMessage.isAuthIsValid()){return false;}
+        if(!oaMessage.isAuthIsValid()){
+            log.info("search video OA failed");
+            return false;
+        }
+        if(oaMessage.getMid()==followeeMid){
+            log.info("cannot follow yourself");
+            return false;}
 
         String findFollowing = "Select mid from b_user where mid = ?";
         String ifFollowing = "SELECT * from user_follow where " +
@@ -321,9 +369,9 @@ public class UserServiceImpl implements UserService {
         boolean hasFollowingUser = false;
         boolean FollowedBefore = true;
 
-        try (Connection con = dataSource.getSQLConnection()) {
+        try (Connection con = dataSource1.getConnection()) {
 
-            con.setAutoCommit(false);
+//            con.setAutoCommit(false);
             PreparedStatement stm1 = con.prepareStatement(findFollowing);
             PreparedStatement stm2 = con.prepareStatement(ifFollowing);
             stm1.setLong(1,followeeMid);
@@ -331,7 +379,7 @@ public class UserServiceImpl implements UserService {
             stm2.setLong(1,followeeMid);
             stm2.setLong(2,oaMessage.getMid());
 
-            con.commit();
+//            con.commit();
 
             ResultSet resultSet1 = stm1.executeQuery();//do we have user in b_user
             ResultSet resultSet2 = stm2.executeQuery();//do we have follow before
@@ -350,7 +398,7 @@ public class UserServiceImpl implements UserService {
             String followSQL = "INSERT into user_follow (follower_mid, following_mid) " +
                     "values (?,?)";
 
-            try(Connection con = dataSource.getSQLConnection()) {
+            try(Connection con = dataSource1.getConnection()) {
 
                 PreparedStatement stm1 = con.prepareStatement(followSQL);
                 stm1.setLong(1,oaMessage.getMid());
@@ -367,7 +415,7 @@ public class UserServiceImpl implements UserService {
         if(hasFollowingUser && FollowedBefore){
             String followSQL = "delete from user_follow where follower_mid = ? and following_mid = ?";
 
-            try(Connection con = dataSource.getSQLConnection()) {
+            try(Connection con = dataSource1.getConnection()) {
 
                 PreparedStatement stm1 = con.prepareStatement(followSQL);
                 stm1.setLong(1,oaMessage.getMid());
@@ -386,7 +434,7 @@ public class UserServiceImpl implements UserService {
 
     }
 
-//not done
+// done
 //@Override
     public UserInfoResp getUserInfos(long mid){
         if(mid<= 0){return null;}
@@ -399,7 +447,7 @@ public class UserServiceImpl implements UserService {
 
         Connection con = null;
         try {
-            con = dataSource.getSQLConnection();
+            con = dataSource1.getConnection();
 //            PreparedStatement stm = con.prepareStatement();
             //1 Thread 1 select1
             PreparedStatement stm1 = con.prepareStatement(getUser);
@@ -522,13 +570,24 @@ public class UserServiceImpl implements UserService {
             String[] UserPosted= result5.toArray(new String[result5.size()]);
             pre.close();
 
-            userInfoResp = new UserInfoResp(userId,coin,following,follower,UserWatched,UserLike,UserCollected,UserPosted);
+            userInfoResp = new UserInfoResp(userId,coin,follower,following,UserWatched,UserLike,UserCollected,UserPosted);
 
+            String sb = "select pg_terminate_backend(pid) from pg_stat_activity where state='idle';";
+            try(PreparedStatement pre1 = con.prepareStatement(sb)){
+                pre1.executeUpdate();
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
             return userInfoResp;
         } catch (SQLException e) {
             return null;
         }
     }
+
+    /**
+     * AC,but slow
+     * */
+
     @Override
     public UserInfoResp getUserInfo(long mid) {
 //        log.info("je");
@@ -553,17 +612,6 @@ public class UserServiceImpl implements UserService {
             futures.add(VideoCollected);
 
 
-//            // 等待所有任务执行完毕
-//            for (Future<?> future : futures) {
-//                try {
-//                    future.get(); // 等待每个任务完成
-//                } catch (InterruptedException | ExecutionException e) {
-//                    // 处理异常
-//                    e.printStackTrace();
-//                }
-//            }
-
-            log.info("01");
 
             // Get results from thread 1
             UserInfo user = userFuture.get();
@@ -575,40 +623,65 @@ public class UserServiceImpl implements UserService {
                 coin = user.getCoin();
                 // Process user details
             }else {return null;}
-            log.info("01");
+
 
             // Get results from thread 2
             long[] followingMids = followingMidsFuture.get();
-            log.info("02");
+            if(followingMids!=(null)){
+//                log.info(followingMids.length+"");
+            }else {
+                followingMids = new long[0];
+            }
 
             // Get results from thread 3
             long[] followerMids  = followerMidsFuture.get();
-            log.info("03");
+            if(followerMids!=(null)){
+//                log.info(followerMids.length+"");
+            }else {
+                followerMids = new long[0];
+            }
 
             // Get results from thread 4
             String[] Watchbv = MidsWatchFuture.get();
-            log.info("04");
+            if(Watchbv!=null){
+//                log.info(Watchbv.length+"");
+            }else{
+                Watchbv = new String[0];
+            }
+
 
             // Get results from thread 5
             String[] Likebv = VideoLikeFuture.get();
-            log.info("05");
+            if(Likebv!=null){
+//                log.info(Likebv.length+"");
+            }else {
+                Likebv = new String[0];
+            }
+
 
             // Get results from thread 6
             String[] Postedbv = VideoPosted.get();
-            log.info("06");
+            if(Postedbv!=null){
+//                log.info(Postedbv.length+" postl");
+            }else {
+                Postedbv = new String[0];
+            }
+
 
             // Get results from thread 7
             String[] Collectedbv = VideoCollected.get();
-            log.info("07");
+            if(Collectedbv!=null){
+//                log.info(Collectedbv.length+" collectl");
+            }else {
+                Collectedbv = new String[0];
+            }
+
+//            log.info("恭喜发财！恭喜你发财！");
 
             UserInfoResp userInfoResp = new UserInfoResp(
                     userId,coin,followingMids,followerMids,Watchbv,Likebv,Collectedbv,Postedbv
             );
-            log.info("08");
 
-
-            log.info("get user info");
-            log.info(userInfoResp.toString());
             return userInfoResp;
 
         } catch (InterruptedException | ExecutionException e) {
@@ -626,26 +699,32 @@ public class UserServiceImpl implements UserService {
     * */
     private UserInfo selectUser(long mid) {
         String getUser = "SELECT mid,coin from b_user where mid = ? ";
-        try (Connection con = dataSource.getSQLConnection();
+        try (Connection con = dataSource.getConnection();
              PreparedStatement stm1 = con.prepareStatement(getUser)) {
             stm1.setLong(1, mid);
             ResultSet resultSet = stm1.executeQuery();
-            if (!resultSet.next()) {
-                return null;
+//            if (resultSet.getRow()==0) {
+//                return null;
+//            }
+            if(resultSet.next()){
+                long userId = resultSet.getLong("mid");
+                int coin = resultSet.getInt("coin");
+                stm1.close();
+                con.close();
+                return new UserInfo(userId, coin);
             }
 
-            long userId = resultSet.getLong("mid");
-            int coin = resultSet.getInt("coin");
-            con.close();
-            return new UserInfo(userId, coin);
+
+
         } catch (SQLException e) {
             return null;
         }
+        return null;
     }
 
     private long[] selectUserFollowing(long mid) {
         String getUserFollowing = "SELECT following_mid from user_follow where follower_mid = ? ";
-        try (Connection con = dataSource.getSQLConnection();
+        try (Connection con = dataSource.getConnection();
              PreparedStatement stm2 = con.prepareStatement(getUserFollowing)) {
 
             stm2.setLong(1, mid);
@@ -664,6 +743,7 @@ public class UserServiceImpl implements UserService {
                 a[i] = result.get(i);
             }
 //            Long[] array = result.toArray(new Long[result.size()]);
+            stm2.close();
             con.close();
             return a;
         } catch (SQLException e) {
@@ -672,7 +752,7 @@ public class UserServiceImpl implements UserService {
     }
     private long[] selectUserFollower(long mid) {
         String getUserFollower = "SELECT follower_mid from user_follow where following_mid = ? ";
-        try (Connection con = dataSource.getSQLConnection();
+        try (Connection con = dataSource.getConnection();
              PreparedStatement stm3 = con.prepareStatement(getUserFollower)) {
 
             stm3.setLong(1, mid);
@@ -680,9 +760,7 @@ public class UserServiceImpl implements UserService {
             ResultSet resultSet3 = stm3.executeQuery();
             List<Long> result3 = new ArrayList<>();
 
-            if (!resultSet3.next()) {
-                return null;
-            }
+
 
             while (resultSet3.next()) {
                 result3.add(resultSet3.getLong("follower_mid"));
@@ -692,6 +770,7 @@ public class UserServiceImpl implements UserService {
             for (int i = 0; i < result3.size(); i++) {
                 a[i] = result3.get(i);
             }
+            stm3.close();
             con.close();
             return a;
 //                    result3.toArray(new Long[result3.size()]);
@@ -701,7 +780,7 @@ public class UserServiceImpl implements UserService {
     }
     private String[] selectUserWatched(long mid) {
         String getUserWatched = "SELECT bv from user_watch_video where user_mid = ? ";
-        try (Connection con = dataSource.getSQLConnection();
+        try (Connection con = dataSource.getConnection();
              PreparedStatement stm4 = con.prepareStatement(getUserWatched)) {
 
             stm4.setLong(1, mid);
@@ -709,13 +788,10 @@ public class UserServiceImpl implements UserService {
             ResultSet resultSet4 = stm4.executeQuery();
             List<String> result4 = new ArrayList<>();
 
-            if (!resultSet4.next()) {
-                return null;
-            }
-
             while (resultSet4.next()) {
                 result4.add(resultSet4.getString("bv"));
             }
+            stm4.close();
             con.close();
             return result4.toArray(new String[result4.size()]);
         } catch (SQLException e) {
@@ -724,7 +800,7 @@ public class UserServiceImpl implements UserService {
     }
     private String[] selectUserLikedVideos(long mid) {
         String getUserLikedVideos = "SELECT bv from user_like_video where user_mid = ? ";
-        try (Connection con = dataSource.getSQLConnection();
+        try (Connection con = dataSource.getConnection();
              PreparedStatement stm = con.prepareStatement(getUserLikedVideos)) {
 
             stm.setLong(1, mid);
@@ -732,13 +808,10 @@ public class UserServiceImpl implements UserService {
             ResultSet resultSet = stm.executeQuery();
             List<String> result = new ArrayList<>();
 
-            if (!resultSet.next()) {
-                return null;
-            }
-
-            do {
+            while (resultSet.next())  {
                 result.add(resultSet.getString("bv"));
-            } while (resultSet.next());
+            }
+            stm.close();
             con.close();
             return result.toArray(new String[result.size()]);
         } catch (SQLException e) {
@@ -748,7 +821,7 @@ public class UserServiceImpl implements UserService {
 
     private String[] selectUserPostedVideos(long mid) {
         String getUserPostedVideos = "SELECT bv from b_video where owner_mid = ? ";
-        try (Connection con = dataSource.getSQLConnection();
+        try (Connection con = dataSource.getConnection();
              PreparedStatement stm = con.prepareStatement(getUserPostedVideos)) {
 
             stm.setLong(1, mid);
@@ -756,22 +829,27 @@ public class UserServiceImpl implements UserService {
             ResultSet resultSet = stm.executeQuery();
             List<String> result = new ArrayList<>();
 
-            if (!resultSet.next()) {
-                return null;
-            }
 
-            do {
+
+            while (resultSet.next()) {
                 result.add(resultSet.getString("bv"));
-            } while (resultSet.next());
+            }
+//            log.info(result.size()+"");
+            stm.close();
             con.close();
-            return result.toArray(new String[result.size()]);
+            String[] s= result.toArray(new String[result.size()]);
+//            log.info(s.length+" post");
+//            log.info(s.toString());
+            return s;
         } catch (SQLException e) {
             return null;
         }
     }
+
+    //AC
     private String[] selectUserCollectedVideos(long mid) {
         String getUserCollectedVideos = "SELECT bv from user_collect_video where user_mid = ? ";
-        try (Connection con = dataSource.getSQLConnection();
+        try (Connection con = dataSource.getConnection();
              PreparedStatement stm = con.prepareStatement(getUserCollectedVideos)) {
 
             stm.setLong(1, mid);
@@ -779,13 +857,11 @@ public class UserServiceImpl implements UserService {
             ResultSet resultSet = stm.executeQuery();
             List<String> result = new ArrayList<>();
 
-//            if (!resultSet.next()) {
-//                return null;
-//            }
-
-            do {
+            while (resultSet.next()){
                 result.add(resultSet.getString("bv"));
-            } while (resultSet.next());
+            }
+//            log.info(result.size()+" Collect size");
+            stm.close();
             con.close();
             return result.toArray(new String[result.size()]);
         } catch (SQLException e) {
@@ -793,13 +869,6 @@ public class UserServiceImpl implements UserService {
         }
     }
 
-
-
-
-//    static String Auth2A = "SELECT * from b_user where ? = ? and ? = ?";
-
-//    static String AuthA = "SELECT * from b_user where ? = ?";
-//    static String Auth3A = "SELECT * from b_user where mid = ? and wechat = ? and qq = ?";
 
     ////////////////////NIUNIUNIUNIUNIHDJSAJFLAFJ;EVFJK DFHASFKLDASHJCLGKZ DFR//////////////////////////////////////////////////
 
@@ -810,8 +879,8 @@ public class UserServiceImpl implements UserService {
         if(auth.getMid()<=0){//don't have mid
             if(auth.getPassword()==null){//don't have password
                 if(auth.getQq()!=null && auth.getWechat()!=null){ //2A
-                    try(Connection con = dataSource.getSQLConnection()) {
-//                        Connection con = dataSource.getSQLConnection();
+                    try(Connection con = dataSource.getConnection()) {
+//                        Connection con = dataSource.getConnection()();
                         String Auth2A = "SELECT * from b_user where qq = ? and wechat= ?  ";
                         PreparedStatement stmt = con.prepareStatement(Auth2A);
                         stmt.setString(1,auth.getQq());
@@ -819,6 +888,8 @@ public class UserServiceImpl implements UserService {
 
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
 
                     } catch (SQLException e) {
@@ -826,27 +897,31 @@ public class UserServiceImpl implements UserService {
                     }
                 }
                 if(auth.getQq()!=null && auth.getWechat()==null){//qq 1A
-                    try(Connection con = dataSource.getSQLConnection()){
-//                        Connection con = dataSource.getSQLConnection();
+                    try(Connection con = dataSource.getConnection()){
+//                        Connection con = dataSource.getConnection()();
                         String AuthA = "SELECT * from b_user where qq = ? ";
                         PreparedStatement stmt = con.prepareStatement(AuthA);
 
                         stmt.setString(1,auth.getQq());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;
                     }
                 }
                 if(auth.getQq()==null && auth.getWechat()!=null){
-                    try(Connection con = dataSource.getSQLConnection()) {
-//                        Connection con = dataSource.getSQLConnection();
+                    try(Connection con = dataSource.getConnection()) {
+//                        Connection con = dataSource.getConnection()();
                         String AuthA = "SELECT * from b_user where wechat = ?  ";
                         PreparedStatement stmt = con.prepareStatement(AuthA); //1A
                         stmt.setString(1, auth.getWechat());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;
@@ -859,8 +934,8 @@ public class UserServiceImpl implements UserService {
             }
             else {//has password
                 if(auth.getQq()!=null && auth.getWechat()!=null){ //3A
-                    try(Connection con = dataSource.getSQLConnection()) {
-//                        Connection con = dataSource.getSQLConnection();
+                    try(Connection con = dataSource.getConnection()) {
+//                        Connection con = dataSource.getConnection()();
                         String Auth3A = "SELECT * from b_user " +
                                 "where wechat = ? and qq = ? and password = ? ";
                         PreparedStatement stmt = con.prepareStatement(Auth3A);
@@ -872,14 +947,16 @@ public class UserServiceImpl implements UserService {
                         stmt.setString(3,auth.getPassword());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;
                     } catch (SQLException e) {
                         return message;
                     }
                 }
                 if(auth.getQq()==null && auth.getWechat()!=null){  //2A
-                    try(Connection con = dataSource.getSQLConnection()) {
-//                        Connection con = dataSource.getSQLConnection();
+                    try(Connection con = dataSource.getConnection()) {
+//                        Connection con = dataSource.getConnection()();
                         String Auth2A = "SELECT * from b_user " +
                                 "where wechat = ? and password =?  ";
                         PreparedStatement stmt = con.prepareStatement(Auth2A);
@@ -889,13 +966,15 @@ public class UserServiceImpl implements UserService {
                         stmt.setString(2,auth.getPassword());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;
                     } catch (SQLException e) {
                         return message;
                     }
                 }
                 if(auth.getQq()!=null && auth.getWechat()==null){//2A
-                    try(Connection con = dataSource.getSQLConnection()) {
+                    try(Connection con = dataSource.getConnection()) {
 
                         String Auth2A = "SELECT * from b_user " +
                                 "where qq = ? and password =? ";
@@ -906,6 +985,8 @@ public class UserServiceImpl implements UserService {
                         stmt.setString(2,auth.getPassword());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;
                     } catch (SQLException e) {
                         return message;
@@ -920,7 +1001,7 @@ public class UserServiceImpl implements UserService {
         else {//HAVE MID
             if(auth.getPassword()==null){//don't have password
                 if(auth.getQq()!=null && auth.getWechat()!=null){//3A
-                    try(Connection con = dataSource.getSQLConnection()) {
+                    try(Connection con = dataSource.getConnection()) {
 
                         String Auth3A = "SELECT * from b_user " +
                                 "where mid = ? and wechat = ? and password =? ";
@@ -931,13 +1012,15 @@ public class UserServiceImpl implements UserService {
                         stmt.setString(3,auth.getPassword());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;
                     }
                 }
                 if(auth.getQq()==null && auth.getWechat()!=null){//2A
-                    try(Connection con = dataSource.getSQLConnection()) {
+                    try(Connection con = dataSource.getConnection()) {
 
                         String Auth2A = "SELECT * from b_user " +
                                 "where mid = ? and wechat =? ";
@@ -948,13 +1031,15 @@ public class UserServiceImpl implements UserService {
                         stmt.setString(2,auth.getWechat());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;
                     }
                 }
                 if(auth.getQq()!=null && auth.getWechat()==null){//2A
-                    try(Connection con = dataSource.getSQLConnection()) {
+                    try(Connection con = dataSource.getConnection()) {
 
                         String Auth2A = "SELECT * from b_user " +
                                 "where mid = ? and qq =? ";
@@ -965,6 +1050,8 @@ public class UserServiceImpl implements UserService {
                         stmt.setString(2,auth.getQq());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;
@@ -975,7 +1062,7 @@ public class UserServiceImpl implements UserService {
                 }
             }else {// have password
                 if(auth.getQq()!=null && auth.getWechat()!=null){//4A
-                    try(Connection con = dataSource.getSQLConnection()) {
+                    try(Connection con = dataSource.getConnection()) {
 //                        System.out.println("4A");
 
 
@@ -998,13 +1085,15 @@ public class UserServiceImpl implements UserService {
 //                        System.out.println(1);
 //                        System.out.println(resultSet.toString());
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;
                     }
                 }
                 if(auth.getQq()==null && auth.getWechat()!=null){//3A
-                    try (Connection con = dataSource.getSQLConnection()) {
+                    try (Connection con = dataSource.getConnection()) {
 
                         String Auth3A = "SELECT * from b_user " +
                                 "where mid = ? and wechat =? and password =? ";
@@ -1017,13 +1106,16 @@ public class UserServiceImpl implements UserService {
                         stmt.setString(3,auth.getPassword());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;
                     }
                 }
-                if(auth.getQq()!=null && auth.getWechat()==null){//3A
-                    try (Connection con = dataSource.getSQLConnection()) {
+       //3A
+         if(auth.getQq()!=null && auth.getWechat()==null){//3A
+                    try (Connection con = dataSource.getConnection()) {
 
                         String Auth3A = "SELECT * from b_user " +
                                 "where mid = ? and qq =? and password=? ";
@@ -1036,13 +1128,15 @@ public class UserServiceImpl implements UserService {
                         stmt.setString(3,auth.getPassword());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;
                     }
                 }
                 if(auth.getQq()==null && auth.getWechat()==null){//2A
-                    try (Connection con = dataSource.getSQLConnection()) {
+                    try (Connection con = dataSource.getConnection()) {
 
                         String Auth2A = "SELECT * from b_user " +
                                 "where mid = ? and password =? ";
@@ -1053,6 +1147,8 @@ public class UserServiceImpl implements UserService {
                         stmt.setString(2,auth.getPassword());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;

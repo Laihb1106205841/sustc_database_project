@@ -18,11 +18,11 @@ import java.util.regex.Pattern;
 public class UserValidationCheck {
 
 
-    private DataSource dataSource;
-
-    public UserValidationCheck(DataSource dataSource){
-        this.dataSource=dataSource;
-    }
+//    private DataSource dataSource;
+//
+//    public UserValidationCheck(DataSource dataSource){
+//        this.dataSource=dataSource;
+//    }
 
 
 
@@ -41,6 +41,11 @@ public class UserValidationCheck {
 
             // 判断月份和日期的合法性
             if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+                if(month==4&&day>30){return false;}
+                if(month==2&&day>29){return false;}
+                if(month==6&&day>30){return false;}
+                if(month==9&&day>30){return false;}
+                if(month==11&&day>30){return false;}
                 return true; // 符合条件
             }
         }
@@ -50,253 +55,253 @@ public class UserValidationCheck {
 
 //    static
 
-    public OAMessage checkAuthInvalid(AuthInfo auth){
-
-
-        OAMessage message = new OAMessage();
-        if(auth.getMid()<=0){//don't have mid
-            if(auth.getPassword()==null){//don't have password
-                if(auth.getQq()!=null && auth.getWechat()!=null){ //2A
-                    try {
-                        Connection con = dataSource.getConnection();
-                        String Auth2A = "SELECT * from b_user where qq = ? and wechat= ?";
-                        PreparedStatement stmt = con.prepareStatement(Auth2A);
-                        stmt.setString(1,auth.getQq());
-                        stmt.setString(2,auth.getWechat());
-
-                        ResultSet resultSet = stmt.executeQuery();
-                        HasResultAndSet(message, resultSet);
-                        return message;
-
-                    } catch (SQLException e) {
-                        return message;
-                    }
-                }
-                if(auth.getQq()!=null && auth.getWechat()==null){//qq 1A
-                    try{
-                        Connection con = dataSource.getConnection();
-                        String AuthA = "SELECT * from b_user where qq = ? ";
-                        PreparedStatement stmt = con.prepareStatement(AuthA);
-
-                        stmt.setString(1,auth.getQq());
-                        ResultSet resultSet = stmt.executeQuery();
-                        HasResultAndSet(message, resultSet);
-                        return message;// don't have the person
-                    } catch (SQLException e) {
-                        return message;
-                    }
-                }
-                if(auth.getQq()==null && auth.getWechat()!=null){
-                    try {
-                        Connection con = dataSource.getConnection();
-                        String AuthA = "SELECT * from b_user where wechat = ? ";
-                        PreparedStatement stmt = con.prepareStatement(AuthA); //1A
-                        stmt.setString(1, auth.getWechat());
-                        ResultSet resultSet = stmt.executeQuery();
-                        HasResultAndSet(message, resultSet);
-                        return message;// don't have the person
-                    } catch (SQLException e) {
-                        return message;
-                    }
-                }
-                if(auth.getQq()==null && auth.getWechat()==null){  //0A
-                    // nmdx,shen me dou mei you ni deng ge ji er
-                    return message;
-                }
-            }
-            else {//has password
-                if(auth.getQq()!=null && auth.getWechat()!=null){ //3A
-                    try {
-                        Connection con = dataSource.getConnection();
-                        String Auth3A = "SELECT * from b_user where wechat = ? and qq = ? and password = ?";
-                        PreparedStatement stmt = con.prepareStatement(Auth3A);
-
-                        stmt.setString(1,auth.getWechat());
-
-                        stmt.setString(2,auth.getQq());
-
-                        stmt.setString(3,auth.getPassword());
-                        ResultSet resultSet = stmt.executeQuery();
-                        HasResultAndSet(message, resultSet);
-                        return message;
-                    } catch (SQLException e) {
-                        return message;
-                    }
-                }
-                if(auth.getQq()==null && auth.getWechat()!=null){  //2A
-                    try {
-                        Connection con = dataSource.getConnection();
-                        String Auth2A = "SELECT * from b_user where wechat = ? and password =? ";
-                        PreparedStatement stmt = con.prepareStatement(Auth2A);
-
-                        stmt.setString(1,auth.getWechat());
-
-                        stmt.setString(2,auth.getPassword());
-                        ResultSet resultSet = stmt.executeQuery();
-                        HasResultAndSet(message, resultSet);
-                        return message;
-                    } catch (SQLException e) {
-                        return message;
-                    }
-                }
-                if(auth.getQq()!=null && auth.getWechat()==null){//2A
-                    try {
-                        Connection con = dataSource.getConnection();
-                        String Auth2A = "SELECT * from b_user where qq = ? and password =? ";
-                        PreparedStatement stmt = con.prepareStatement(Auth2A);
-
-                        stmt.setString(1,auth.getQq());
-
-                        stmt.setString(2,auth.getPassword());
-                        ResultSet resultSet = stmt.executeQuery();
-                        HasResultAndSet(message, resultSet);
-                        return message;
-                    } catch (SQLException e) {
-                        return message;
-                    }
-                }
-                if(auth.getQq()==null && auth.getWechat()==null){//A
-                    return message;//only password
-                }
-            }
-
-        }
-        else {//HAVE MID
-            if(auth.getPassword()==null){//don't have password
-                if(auth.getQq()!=null && auth.getWechat()!=null){//3A
-                    try {
-                        Connection con = dataSource.getConnection();
-                        String Auth3A = "SELECT * from b_user where mid = ? and wechat = ? and password =? ";
-                        PreparedStatement stmt = con.prepareStatement(Auth3A);
-
-                        stmt.setLong(1,auth.getMid());
-                        stmt.setString(2,auth.getWechat());
-                        stmt.setString(3,auth.getPassword());
-                        ResultSet resultSet = stmt.executeQuery();
-                        HasResultAndSet(message, resultSet);
-                        return message;// don't have the person
-                    } catch (SQLException e) {
-                        return message;
-                    }
-                }
-                if(auth.getQq()==null && auth.getWechat()!=null){//2A
-                    try {
-                        Connection con = dataSource.getConnection();
-                        String Auth2A = "SELECT * from b_user where mid = ? and wechat =? ";
-                        PreparedStatement stmt = con.prepareStatement(Auth2A);
-
-                        stmt.setLong(1,auth.getMid());
-
-                        stmt.setString(2,auth.getWechat());
-                        ResultSet resultSet = stmt.executeQuery();
-                        HasResultAndSet(message, resultSet);
-                        return message;// don't have the person
-                    } catch (SQLException e) {
-                        return message;
-                    }
-                }
-                if(auth.getQq()!=null && auth.getWechat()==null){//2A
-                    try {
-                        Connection con = dataSource.getConnection();
-                        String Auth2A = "SELECT * from b_user where mid = ? and qq =? ";
-                        PreparedStatement stmt = con.prepareStatement(Auth2A);
-
-                        stmt.setLong(1,auth.getMid());
-
-                        stmt.setString(2,auth.getQq());
-                        ResultSet resultSet = stmt.executeQuery();
-                        HasResultAndSet(message, resultSet);
-                        return message;// don't have the person
-                    } catch (SQLException e) {
-                        return message;
-                    }
-                }
-                if(auth.getQq()==null && auth.getWechat()==null){//A
-                    return message;
-                }
-            }else {// have password
-                if(auth.getQq()!=null && auth.getWechat()!=null){//4A
-                    try {
-//                        System.out.println("4A");
-                        Connection con = dataSource.getConnection();
-                        String Auth4A = "SELECT * from b_user where mid = ? and wechat = ? and qq = ? and password = ?";
-//                        System.out.println(dataSource.toString());
-                        PreparedStatement stmt = con.prepareStatement(Auth4A);
-
-                        stmt.setLong(1,auth.getMid());
-
-                        stmt.setString(2,auth.getWechat());
-
-                        stmt.setString(3,auth.getQq());
-
-                        stmt.setString(4,auth.getPassword());
-
-                        ResultSet resultSet = stmt.executeQuery();
-//                        if(!resultSet.next()){System.out.println("hey");}
-//                        System.out.println(1);
-//                        System.out.println(resultSet.toString());
-                        HasResultAndSet(message, resultSet);
-                        return message;// don't have the person
-                    } catch (SQLException e) {
-                        return message;
-                    }
-                }
-                if(auth.getQq()==null && auth.getWechat()!=null){//3A
-                    try {
-                        Connection con = dataSource.getConnection();
-                        String Auth3A = "SELECT * from b_user where mid = ? and wechat =? and password =?";
-                        PreparedStatement stmt = con.prepareStatement(Auth3A);
-
-                        stmt.setLong(1,auth.getMid());
-
-                        stmt.setString(2,auth.getWechat());
-
-                        stmt.setString(3,auth.getPassword());
-                        ResultSet resultSet = stmt.executeQuery();
-                        HasResultAndSet(message, resultSet);
-                        return message;// don't have the person
-                    } catch (SQLException e) {
-                        return message;
-                    }
-                }
-                if(auth.getQq()!=null && auth.getWechat()==null){//3A
-                    try {
-                        Connection con = dataSource.getConnection();
-                        String Auth3A = "SELECT * from b_user where mid = ? and qq =? and password=?";
-                        PreparedStatement stmt = con.prepareStatement(Auth3A);
-
-                        stmt.setLong(1,auth.getMid());
-
-                        stmt.setString(2,auth.getQq());
-
-                        stmt.setString(3,auth.getPassword());
-                        ResultSet resultSet = stmt.executeQuery();
-                        HasResultAndSet(message, resultSet);
-                        return message;// don't have the person
-                    } catch (SQLException e) {
-                        return message;
-                    }
-                }
-                if(auth.getQq()==null && auth.getWechat()==null){//2A
-                    try {
-                        Connection con = dataSource.getConnection();
-                        String Auth2A = "SELECT * from b_user where mid = ? and password =? ";
-                        PreparedStatement stmt = con.prepareStatement(Auth2A);
-
-                        stmt.setLong(1,auth.getMid());
-
-                        stmt.setString(2,auth.getPassword());
-                        ResultSet resultSet = stmt.executeQuery();
-                        HasResultAndSet(message, resultSet);
-                        return message;// don't have the person
-                    } catch (SQLException e) {
-                        return message;
-                    }
-                }
-            }
-        }
-        return message;
-    }
+//    public OAMessage checkAuthInvalid(AuthInfo auth){
+//
+//
+//        OAMessage message = new OAMessage();
+//        if(auth.getMid()<=0){//don't have mid
+//            if(auth.getPassword()==null){//don't have password
+//                if(auth.getQq()!=null && auth.getWechat()!=null){ //2A
+//                    try {
+//                        Connection con = dataSource.getConnection();
+//                        String Auth2A = "SELECT * from b_user where qq = ? and wechat= ?";
+//                        PreparedStatement stmt = con.prepareStatement(Auth2A);
+//                        stmt.setString(1,auth.getQq());
+//                        stmt.setString(2,auth.getWechat());
+//
+//                        ResultSet resultSet = stmt.executeQuery();
+//                        HasResultAndSet(message, resultSet);
+//                        return message;
+//
+//                    } catch (SQLException e) {
+//                        return message;
+//                    }
+//                }
+//                if(auth.getQq()!=null && auth.getWechat()==null){//qq 1A
+//                    try{
+//                        Connection con = dataSource.getConnection();
+//                        String AuthA = "SELECT * from b_user where qq = ? ";
+//                        PreparedStatement stmt = con.prepareStatement(AuthA);
+//
+//                        stmt.setString(1,auth.getQq());
+//                        ResultSet resultSet = stmt.executeQuery();
+//                        HasResultAndSet(message, resultSet);
+//                        return message;// don't have the person
+//                    } catch (SQLException e) {
+//                        return message;
+//                    }
+//                }
+//                if(auth.getQq()==null && auth.getWechat()!=null){
+//                    try {
+//                        Connection con = dataSource.getConnection();
+//                        String AuthA = "SELECT * from b_user where wechat = ? ";
+//                        PreparedStatement stmt = con.prepareStatement(AuthA); //1A
+//                        stmt.setString(1, auth.getWechat());
+//                        ResultSet resultSet = stmt.executeQuery();
+//                        HasResultAndSet(message, resultSet);
+//                        return message;// don't have the person
+//                    } catch (SQLException e) {
+//                        return message;
+//                    }
+//                }
+//                if(auth.getQq()==null && auth.getWechat()==null){  //0A
+//                    // nmdx,shen me dou mei you ni deng ge ji er
+//                    return message;
+//                }
+//            }
+//            else {//has password
+//                if(auth.getQq()!=null && auth.getWechat()!=null){ //3A
+//                    try {
+//                        Connection con = dataSource.getConnection();
+//                        String Auth3A = "SELECT * from b_user where wechat = ? and qq = ? and password = ?";
+//                        PreparedStatement stmt = con.prepareStatement(Auth3A);
+//
+//                        stmt.setString(1,auth.getWechat());
+//
+//                        stmt.setString(2,auth.getQq());
+//
+//                        stmt.setString(3,auth.getPassword());
+//                        ResultSet resultSet = stmt.executeQuery();
+//                        HasResultAndSet(message, resultSet);
+//                        return message;
+//                    } catch (SQLException e) {
+//                        return message;
+//                    }
+//                }
+//                if(auth.getQq()==null && auth.getWechat()!=null){  //2A
+//                    try {
+//                        Connection con = dataSource.getConnection();
+//                        String Auth2A = "SELECT * from b_user where wechat = ? and password =? ";
+//                        PreparedStatement stmt = con.prepareStatement(Auth2A);
+//
+//                        stmt.setString(1,auth.getWechat());
+//
+//                        stmt.setString(2,auth.getPassword());
+//                        ResultSet resultSet = stmt.executeQuery();
+//                        HasResultAndSet(message, resultSet);
+//                        return message;
+//                    } catch (SQLException e) {
+//                        return message;
+//                    }
+//                }
+//                if(auth.getQq()!=null && auth.getWechat()==null){//2A
+//                    try {
+//                        Connection con = dataSource.getConnection();
+//                        String Auth2A = "SELECT * from b_user where qq = ? and password =? ";
+//                        PreparedStatement stmt = con.prepareStatement(Auth2A);
+//
+//                        stmt.setString(1,auth.getQq());
+//
+//                        stmt.setString(2,auth.getPassword());
+//                        ResultSet resultSet = stmt.executeQuery();
+//                        HasResultAndSet(message, resultSet);
+//                        return message;
+//                    } catch (SQLException e) {
+//                        return message;
+//                    }
+//                }
+//                if(auth.getQq()==null && auth.getWechat()==null){//A
+//                    return message;//only password
+//                }
+//            }
+//
+//        }
+//        else {//HAVE MID
+//            if(auth.getPassword()==null){//don't have password
+//                if(auth.getQq()!=null && auth.getWechat()!=null){//3A
+//                    try {
+//                        Connection con = dataSource.getConnection();
+//                        String Auth3A = "SELECT * from b_user where mid = ? and wechat = ? and password =? ";
+//                        PreparedStatement stmt = con.prepareStatement(Auth3A);
+//
+//                        stmt.setLong(1,auth.getMid());
+//                        stmt.setString(2,auth.getWechat());
+//                        stmt.setString(3,auth.getPassword());
+//                        ResultSet resultSet = stmt.executeQuery();
+//                        HasResultAndSet(message, resultSet);
+//                        return message;// don't have the person
+//                    } catch (SQLException e) {
+//                        return message;
+//                    }
+//                }
+//                if(auth.getQq()==null && auth.getWechat()!=null){//2A
+//                    try {
+//                        Connection con = dataSource.getConnection();
+//                        String Auth2A = "SELECT * from b_user where mid = ? and wechat =? ";
+//                        PreparedStatement stmt = con.prepareStatement(Auth2A);
+//
+//                        stmt.setLong(1,auth.getMid());
+//
+//                        stmt.setString(2,auth.getWechat());
+//                        ResultSet resultSet = stmt.executeQuery();
+//                        HasResultAndSet(message, resultSet);
+//                        return message;// don't have the person
+//                    } catch (SQLException e) {
+//                        return message;
+//                    }
+//                }
+//                if(auth.getQq()!=null && auth.getWechat()==null){//2A
+//                    try {
+//                        Connection con = dataSource.getConnection();
+//                        String Auth2A = "SELECT * from b_user where mid = ? and qq =? ";
+//                        PreparedStatement stmt = con.prepareStatement(Auth2A);
+//
+//                        stmt.setLong(1,auth.getMid());
+//
+//                        stmt.setString(2,auth.getQq());
+//                        ResultSet resultSet = stmt.executeQuery();
+//                        HasResultAndSet(message, resultSet);
+//                        return message;// don't have the person
+//                    } catch (SQLException e) {
+//                        return message;
+//                    }
+//                }
+//                if(auth.getQq()==null && auth.getWechat()==null){//A
+//                    return message;
+//                }
+//            }else {// have password
+//                if(auth.getQq()!=null && auth.getWechat()!=null){//4A
+//                    try {
+////                        System.out.println("4A");
+//                        Connection con = dataSource.getConnection();
+//                        String Auth4A = "SELECT * from b_user where mid = ? and wechat = ? and qq = ? and password = ?";
+////                        System.out.println(dataSource.toString());
+//                        PreparedStatement stmt = con.prepareStatement(Auth4A);
+//
+//                        stmt.setLong(1,auth.getMid());
+//
+//                        stmt.setString(2,auth.getWechat());
+//
+//                        stmt.setString(3,auth.getQq());
+//
+//                        stmt.setString(4,auth.getPassword());
+//
+//                        ResultSet resultSet = stmt.executeQuery();
+////                        if(!resultSet.next()){System.out.println("hey");}
+////                        System.out.println(1);
+////                        System.out.println(resultSet.toString());
+//                        HasResultAndSet(message, resultSet);
+//                        return message;// don't have the person
+//                    } catch (SQLException e) {
+//                        return message;
+//                    }
+//                }
+//                if(auth.getQq()==null && auth.getWechat()!=null){//3A
+//                    try {
+//                        Connection con = dataSource.getConnection();
+//                        String Auth3A = "SELECT * from b_user where mid = ? and wechat =? and password =?";
+//                        PreparedStatement stmt = con.prepareStatement(Auth3A);
+//
+//                        stmt.setLong(1,auth.getMid());
+//
+//                        stmt.setString(2,auth.getWechat());
+//
+//                        stmt.setString(3,auth.getPassword());
+//                        ResultSet resultSet = stmt.executeQuery();
+//                        HasResultAndSet(message, resultSet);
+//                        return message;// don't have the person
+//                    } catch (SQLException e) {
+//                        return message;
+//                    }
+//                }
+//                if(auth.getQq()!=null && auth.getWechat()==null){//3A
+//                    try {
+//                        Connection con = dataSource.getConnection();
+//                        String Auth3A = "SELECT * from b_user where mid = ? and qq =? and password=?";
+//                        PreparedStatement stmt = con.prepareStatement(Auth3A);
+//
+//                        stmt.setLong(1,auth.getMid());
+//
+//                        stmt.setString(2,auth.getQq());
+//
+//                        stmt.setString(3,auth.getPassword());
+//                        ResultSet resultSet = stmt.executeQuery();
+//                        HasResultAndSet(message, resultSet);
+//                        return message;// don't have the person
+//                    } catch (SQLException e) {
+//                        return message;
+//                    }
+//                }
+//                if(auth.getQq()==null && auth.getWechat()==null){//2A
+//                    try {
+//                        Connection con = dataSource.getConnection();
+//                        String Auth2A = "SELECT * from b_user where mid = ? and password =? ";
+//                        PreparedStatement stmt = con.prepareStatement(Auth2A);
+//
+//                        stmt.setLong(1,auth.getMid());
+//
+//                        stmt.setString(2,auth.getPassword());
+//                        ResultSet resultSet = stmt.executeQuery();
+//                        HasResultAndSet(message, resultSet);
+//                        return message;// don't have the person
+//                    } catch (SQLException e) {
+//                        return message;
+//                    }
+//                }
+//            }
+//        }
+//        return message;
+//    }
     public static OAMessage HasResultAndSet(OAMessage message, ResultSet resultSet){
         try {
 //            if(resultSet.getRow()==1){
@@ -333,6 +338,7 @@ public class UserValidationCheck {
 
                 } else {
                     // more than one person logic
+                    message.setAuthIsValid(false);
                 }
             }
         } catch (SQLException e) {

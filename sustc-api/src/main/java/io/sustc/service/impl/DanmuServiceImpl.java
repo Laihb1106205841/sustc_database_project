@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.Resource;
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -20,90 +21,100 @@ import static io.sustc.service.ValidationCheck.UserValidationCheck.HasResultAndS
 @Service
 @Slf4j
 public class DanmuServiceImpl implements DanmuService {
-    @Autowired
+    @Resource
     private DataSource dataSource;
 
 
     // complete
 
-
+    /**
+     * AC
+     * */
     @Override
-    public long sendDanmu(AuthInfo auth, String bv, String content, float time){
-        if(content.isEmpty() || content == null){
-            log.info("content null");
+    public long sendDanmu(AuthInfo auth, String bv, String content, float time) {
+        if (content.isEmpty() || content == null) {
+//            log.info("content null");
             return -1;
         }
         //check OA
         OAMessage oaMessage = checkAuthInvalid(auth);
-        if(!oaMessage.isAuthIsValid()){
-            log.info("OA failed");
-            return -1;}
+        if (!oaMessage.isAuthIsValid()) {
+
+            return -1;
+        }
 
         //check bv
 
-        String CheckBv ="select bv,is_public from b_video where bv = ? and is_public = 1";
-        String CheckView ="select user_mid,view_time from user_watch_video where bv = ? and user_mid =?";
+        String CheckBv = "select bv,is_public,duration from b_video where bv = ? and is_public = 1";
+        String CheckView = "select user_mid from user_watch_video where bv = ? and user_mid =?";
         try (Connection con = dataSource.getConnection();
-             PreparedStatement preparedStatement = con.prepareStatement(CheckBv)){
-            preparedStatement.setString(1,bv);
+             PreparedStatement preparedStatement = con.prepareStatement(CheckBv)) {
+
+            preparedStatement.setString(1, bv);
             ResultSet resultSet = preparedStatement.executeQuery();
-            if(resultSet.next()){
+            if (resultSet.next()) {
+
 //                short is_p = resultSet.getShort("is_public");
 //                if (is_p==0){
 //                    log.info("视频还没有发布");
 //                    return -1;}
                 //watch
+
+                float a = resultSet.getFloat("duration");
+
+                if(time>a){
+//                    log.info(">duration");
+                    return -1;}
+
                 PreparedStatement stm2 = con.prepareStatement(CheckView);
-                stm2.setString(1,bv);
-                stm2.setLong(2,oaMessage.getMid());
+                stm2.setString(1, bv);
+                stm2.setLong(2, oaMessage.getMid());
                 ResultSet resultSet1 = stm2.executeQuery();
 
-                if(resultSet1.next()){
+                if (resultSet1.next()) {
                     long mid = resultSet1.getLong("user_mid");
-                    float watch_time = resultSet1.getFloat("view_time");
+//                    float watch_time = resultSet1.getFloat("view_time");
+
 //                    if(time>watch_time){
 //                        log.info("you haven't seen it yet");
 //                        return -1;
 //                    }
 
-                    String GenerateId = "Select max(danmu_id)+1 from b_danmu";
-                    stm2 = con.prepareStatement(GenerateId);
-                   ResultSet resultSet2 = stm2.executeQuery();
-                    long newId = -1;
-                    if(resultSet2.next()){ newId= resultSet2.getLong(1);
+//                    String GenerateId = "Select max(danmu_id)+1 from b_danmu";
+//                    stm2 = con.prepareStatement(GenerateId);
+//                   ResultSet resultSet2 = stm2.executeQuery();
+                    long newId = 1;
 
-// ���Բ��Բ��Բ��Բ��Բ��Բ��Բ��Բ���TESTDANMUDANMU MEMORYOVERFLOW��������2
-                    String Send="INSERT INTO b_danmu" +
-                            "(danmu_id, bv, sender_mid," +
+                    String Send = "INSERT INTO b_danmu" +
+                            "( bv, sender_mid," +
                             " time, content, post_time) values " +
-                            "       (?,?,?," +
-                                    "?,?,CURRENT_TIMESTAMP)";
+                            "       (?,?," +
+                            "?,?,CURRENT_TIMESTAMP)";
                     stm2 = con.prepareStatement(Send);
-                    stm2.setLong(1,newId);
-                    stm2.setString(2,bv);
-                    stm2.setLong(3,oaMessage.getMid());
-                    stm2.setFloat(4,time);
-                    stm2.setString(5,content);
+//                    stm2.setLong(1,newId);
+                    stm2.setString(1, bv);
+                    stm2.setLong(2, oaMessage.getMid());
+                    stm2.setFloat(3, time);
+                    stm2.setString(4, content);
                     stm2.executeUpdate();
+
+
 
                     preparedStatement.close();
                     stm2.close();
                     con.close();
-                    return newId;}
-                    log.info("come to display");
+                    return newId;
+                } else {
+//                    log.info("haven't watch");
                     return -1;
-                }else {
-                    log.info("haven't watch");
-                    return -1;}
-            }else {
-                log.info("no bv");
-                return -1;
+                }
             }
-
-        }catch (RuntimeException | SQLException e){
-            log.info("SQL fail");
-            return -1;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            throw new RuntimeException(e);
         }
+
+        return -1;
     }
 
 
@@ -169,10 +180,14 @@ public class DanmuServiceImpl implements DanmuService {
 
 
             }else {
+
+//                stmt2.close();
+                con.close();
 //                log.info("找不到bv");
             stmt.close();
             }
         } catch (SQLException e) {
+//            con.close();
             return null;
         }
 
@@ -237,7 +252,9 @@ public class DanmuServiceImpl implements DanmuService {
                return true;
 
 
-            }else {log.info("找不到弹幕");return false;}
+            }else {log.info("找不到弹幕");
+                con.close();
+                return false;}
 
         } catch (Exception e) {
             log.info("wrong with sql");
@@ -266,6 +283,8 @@ public class DanmuServiceImpl implements DanmuService {
 
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
 
                     } catch (SQLException e) {
@@ -281,6 +300,8 @@ public class DanmuServiceImpl implements DanmuService {
                         stmt.setString(1,auth.getQq());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;
@@ -288,13 +309,15 @@ public class DanmuServiceImpl implements DanmuService {
                 }
                 if(auth.getQq()==null && auth.getWechat()!=null){
                     try(Connection con = dataSource.getConnection()) {
-                        log.info("check wechat");
+//                        log.info("check wechat");
 //                        Connection con = dataSource.getConnection();
                         String AuthA = "SELECT * from b_user where wechat = ?  ";
                         PreparedStatement stmt = con.prepareStatement(AuthA); //1A
                         stmt.setString(1, auth.getWechat());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;
@@ -321,6 +344,8 @@ public class DanmuServiceImpl implements DanmuService {
                         stmt.setString(3,auth.getPassword());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;
                     } catch (SQLException e) {
                         return message;
@@ -338,6 +363,8 @@ public class DanmuServiceImpl implements DanmuService {
                         stmt.setString(2,auth.getPassword());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;
                     } catch (SQLException e) {
                         return message;
@@ -355,6 +382,8 @@ public class DanmuServiceImpl implements DanmuService {
                         stmt.setString(2,auth.getPassword());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;
                     } catch (SQLException e) {
                         return message;
@@ -380,6 +409,8 @@ public class DanmuServiceImpl implements DanmuService {
                         stmt.setString(3,auth.getPassword());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;
@@ -397,6 +428,8 @@ public class DanmuServiceImpl implements DanmuService {
                         stmt.setString(2,auth.getWechat());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;
@@ -414,6 +447,8 @@ public class DanmuServiceImpl implements DanmuService {
                         stmt.setString(2,auth.getQq());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;
@@ -447,6 +482,8 @@ public class DanmuServiceImpl implements DanmuService {
 //                        System.out.println(1);
 //                        System.out.println(resultSet.toString());
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;
@@ -466,6 +503,8 @@ public class DanmuServiceImpl implements DanmuService {
                         stmt.setString(3,auth.getPassword());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;
@@ -485,6 +524,8 @@ public class DanmuServiceImpl implements DanmuService {
                         stmt.setString(3,auth.getPassword());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;
@@ -502,6 +543,8 @@ public class DanmuServiceImpl implements DanmuService {
                         stmt.setString(2,auth.getPassword());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;

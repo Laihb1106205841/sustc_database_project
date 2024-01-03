@@ -18,7 +18,13 @@ public class SQLDataSource implements Closeable {
     public static SQLDataSource getInstance() {
         return INSTANCE;
     }
-
+    public SQLDataSource(String jdbcUrl, String username,int ThreadNum) {
+        configureSQLServer(
+                jdbcUrl,
+                username,
+                "123456" //,ThreadNum
+        );
+    }
     public SQLDataSource() {
         configureSQLServer(
                 "jdbc:postgresql://localhost:5432/sustc",
@@ -34,11 +40,12 @@ public class SQLDataSource implements Closeable {
                 "123456" //,ThreadNum
         );
     }
+
     public void configureSQLServer(String jdbcUrl, String username, String password) {
         dataSource.setJdbcUrl(jdbcUrl);
         dataSource.setUsername(username);
         dataSource.setPassword(password);
-        dataSource.setMaximumPoolSize(32);
+        dataSource.setMaximumPoolSize(16);
 
         try {
             dataSource.setLoginTimeout(400000);
@@ -47,6 +54,7 @@ public class SQLDataSource implements Closeable {
             throw new RuntimeException(e);
         }
     }
+
     public void configureSQLServer(String jdbcUrl, String username, String password,int Thread) {
         dataSource = new HikariDataSource();
         dataSource.setJdbcUrl(jdbcUrl);

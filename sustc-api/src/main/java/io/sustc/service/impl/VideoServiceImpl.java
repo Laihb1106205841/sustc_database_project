@@ -10,6 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.asm.Type;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.Resource;
+import javax.sql.DataSource;
 import java.sql.*;
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -21,17 +23,18 @@ import static io.sustc.service.ValidationCheck.UserValidationCheck.HasResultAndS
 @Service
 @Slf4j
 public class VideoServiceImpl implements VideoService {
-    private SQLDataSource dataSource;
+    @Resource
+    private DataSource dataSource;
 
     public VideoServiceImpl(){
-        dataSource = new SQLDataSource(10);
+//        dataSource = new SQLDataSource(10);
     }
     public String postVideo(AuthInfo auth, PostVideoReq req){
 
         if(req.getTitle().isEmpty() || req.getTitle()==null){
             log.info("No title");
             return null;}
-
+        if(req.getPublicTime()==null){return null;}
         if(req.getPublicTime().toLocalDateTime().isBefore(LocalDateTime.now())){
             log.info("before we start");return null;
         }
@@ -46,7 +49,7 @@ public class VideoServiceImpl implements VideoService {
             return null;}
 
         String CHA_CHONG ="SELECT title from b_video where title =? and owner_mid =?";
-        try (Connection con = dataSource.getSQLConnection();
+        try (Connection con = dataSource.getConnection();
              PreparedStatement preparedStatement = con.prepareStatement(CHA_CHONG)){
             preparedStatement.setString(1,req.getTitle());
             preparedStatement.setLong(2,oaMessage.getMid());
@@ -115,9 +118,9 @@ public class VideoServiceImpl implements VideoService {
 
 
 
-        try (Connection con = dataSource.getSQLConnection();
+        try (Connection con = dataSource.getConnection();
              PreparedStatement preparedStatement = con.prepareStatement(GetBv)) {
-
+            preparedStatement.setString(1,bv);
             ResultSet resultSet = preparedStatement.executeQuery();
             if(resultSet.next()){
                 long own = resultSet.getLong(2);
@@ -130,7 +133,7 @@ public class VideoServiceImpl implements VideoService {
                 send.setString(1,bv);
                 send.setLong(2,oaMessage.getMid());
 
-                log.info("准备删除");
+//                log.info("准备删除");
                 send.executeUpdate();
                 send.close();
                 log.info("删除成功");
@@ -145,6 +148,7 @@ public class VideoServiceImpl implements VideoService {
             }
 
         } catch (SQLException e) {
+            log.info(e.toString());
             log.info("SQL 报错");
            return false;
         }
@@ -154,6 +158,8 @@ public class VideoServiceImpl implements VideoService {
         if(req.getTitle().isEmpty() || req.getTitle()==null){
             log.info("No title");
             return false;}
+
+        if(req.getPublicTime()==null){return false;}
 
         if(req.getPublicTime().toLocalDateTime().isBefore(LocalDateTime.now())){
             log.info("before we start");return false;
@@ -170,8 +176,8 @@ public class VideoServiceImpl implements VideoService {
         }
 
 //        String FindVideo = "SELECT bv,owner_mid from b_video where bv = ?";
-        try {
-            Connection con = dataSource.getSQLConnection();
+        try( Connection con = dataSource.getConnection();) {
+
             String CHA_CHONG ="SELECT title,bv,owner_mid,duration,description,public_time from b_video where title =? and owner_mid =?";
             PreparedStatement preparedStatement = con.prepareStatement(CHA_CHONG);
             preparedStatement.setString(1,req.getTitle());
@@ -202,6 +208,8 @@ public class VideoServiceImpl implements VideoService {
             stmt.setFloat(3,req.getDuration());
             stmt.setTimestamp(4,req.getPublicTime());
             stmt.executeUpdate();
+
+            stmt.close();
             return true;
 
         } catch (SQLException e) {
@@ -209,6 +217,10 @@ public class VideoServiceImpl implements VideoService {
 //            return null;
         }
         }
+
+
+        // not yet
+    //TODO: finish this!
     public List<String> searchVideo(AuthInfo auth, String keywords, int pageSize, int pageNum){
         if(keywords.isEmpty() || keywords.equals("")){log.info("null key");return null;}
         if(pageSize<=0){log.info("page size");return null;}
@@ -255,7 +267,7 @@ public class VideoServiceImpl implements VideoService {
 
 
         try {
-            var con = dataSource.getSQLConnection();
+            var con = dataSource.getConnection();
             PreparedStatement pre = con.prepareStatement(sql);
             pre.setString(1,bv);
             ResultSet resultSet = pre.executeQuery();
@@ -275,12 +287,26 @@ public class VideoServiceImpl implements VideoService {
                     con.close();
 
                     return li/length;
-                }else {return -1;}
+                }else {
+                    pre.close();
+                    p.close();
+                    con.close();
+
+                    return -1;}
+//                pre.close();
+//                p.close();
+//                con.close();
 
 
+            }else {
+                pre.close();
+//                p.close();
+                con.close();
 
-            }else {return -1;}
-
+                return -1;}
+//            pre.close();
+//            p.close();
+//            con.close();
 
         } catch (SQLException e) {
             throw new RuntimeException(e);
@@ -312,7 +338,7 @@ public class VideoServiceImpl implements VideoService {
                 "WHERE danmu_count = (SELECT MAX(danmu_count) FROM DanmuChunks) " +
                 "ORDER BY bv, start_time; ";
         try {
-            var con = dataSource.getSQLConnection();
+            var con = dataSource.getConnection();
             var stmt = con.prepareStatement(sql);
             stmt.setString(1,bv);
 
@@ -330,6 +356,9 @@ public class VideoServiceImpl implements VideoService {
             throw new RuntimeException(e);
         }
     }
+    /**
+     * AC
+     * */
     public  boolean reviewVideo(AuthInfo auth, String bv){
         //check OA
         OAMessage oaMessage = checkAuthInvalid(auth);
@@ -340,7 +369,7 @@ public class VideoServiceImpl implements VideoService {
 
         String GetBv = "(select bv,owner_mid,is_review from b_video where bv = ?)";
         try {
-            var con = dataSource.getSQLConnection();
+            var con = dataSource.getConnection();
             PreparedStatement stm = con.prepareStatement(GetBv);
             stm.setString(1,bv);
             ResultSet resultSet = stm.executeQuery();
@@ -354,12 +383,22 @@ public class VideoServiceImpl implements VideoService {
                     PreparedStatement p = con.prepareStatement(alter);
                     p.setString(1,bv);
                     p.executeUpdate();
+
+                    p.close();
+                    stm.close();
+                    con.close();
+
                     return true;
 
+
                 }else {
+//                    p.close();
+                    stm.close();
+                    con.close();
                     log.info("oa / super");
                     return false;
                 }
+
             }else {log.info("no bv");
                 return false;}
 
@@ -367,15 +406,21 @@ public class VideoServiceImpl implements VideoService {
             throw new RuntimeException(e);
         }
     }
+
+    /**
+     * AC
+     * */
     public boolean coinVideo(AuthInfo auth, String bv){
         //check OA
         OAMessage oaMessage = checkAuthInvalid(auth);
         if(!oaMessage.isAuthIsValid()){
-            log.info("search video OA failed");
+//            log.info("search video OA failed");
             return false;
         }
         VideoMessage videoMessage = GetVideoMessage(bv);
-        if(videoMessage == null){log.info("no v");return false;}
+        if(videoMessage == null){
+//            log.info("no v");
+            return false;}
         if(videoMessage.getOwnerMid()==oaMessage.getMid()){log.info("himself");return false;}
         if(videoMessage.getPublicTime().equals(null) || videoMessage.getPublicTime() ==null ){return false;}
         Timestamp d = new Timestamp(System.currentTimeMillis());
@@ -385,21 +430,31 @@ public class VideoServiceImpl implements VideoService {
         if(oaMessage.getCoin()<1){log.info("ni bi mei le");return false;}
 
         String sql = "SELECT * from user_give_coin_video where bv= ? and user_mid = ?";
-        try( var con = dataSource.getSQLConnection();
+        try( var con = dataSource.getConnection();
              PreparedStatement stm = con.prepareStatement(sql);){
             stm.setString(1,bv);
             stm.setLong(2,oaMessage.getMid());
             ResultSet resultSet = stm.executeQuery();
-            if(resultSet.next()){log.info("you have coin it");return false;}
+            if(resultSet.next()){
+//                log.info("you have coin it");
+                return false;}
             stm.close();
 
             //transaction
-            String sbl = "SELECT insert_and_update_coins(?, ?);";
+            String sbl =
+                    "INSERT INTO user_give_coin_video (user_mid, bv) VALUES (?, ?); ";
+
+
             PreparedStatement t = con.prepareStatement(sbl);
-            t.setString(2,bv);
             t.setLong(1,oaMessage.getMid());
+            t.setString(2,bv);
             t.executeUpdate();
             t.close();
+            String sml = "UPDATE b_user SET coin = coin - 1 WHERE mid = ?;";
+            PreparedStatement t2 = con.prepareStatement(sml);
+            t2.setLong(1,oaMessage.getMid());
+            t2.executeUpdate();
+            t2.close();
 
 
             return true;
@@ -408,29 +463,94 @@ public class VideoServiceImpl implements VideoService {
         }
     }
 
+    /**
+     * AC
+     * */
     public boolean likeVideo(AuthInfo auth, String bv){
         //check OA
         OAMessage oaMessage = checkAuthInvalid(auth);
         if(!oaMessage.isAuthIsValid()){
-            log.info("search video OA failed");
+//            log.info("search video OA failed");
             return false;
         }
         VideoMessage videoMessage = GetVideoMessage(bv);
-        if(videoMessage == null){log.info("no v");return false;}
+        if(videoMessage == null){
+//            log.info("no v");
+            return false;}
+
         if(videoMessage.getOwnerMid()==oaMessage.getMid()){log.info("himself");return false;}
+
         if(videoMessage.getPublicTime().equals(null) || videoMessage.getPublicTime() ==null ){return false;}
         Timestamp d = new Timestamp(System.currentTimeMillis());
         if(videoMessage.getPublicTime().after(d) && !oaMessage.getIdentity().toLowerCase().equals("superuser")){
             log.info("can not see");return false;
         }
 
+        String select = "SELECT insert_or_delete_user_like_video(?, ?);";
 
-        return false;}
-    public boolean collectVideo(AuthInfo auth, String bv){return false;}
+        try( var con = dataSource.getConnection();
+             PreparedStatement stm = con.prepareStatement(select);){
+            stm.setString(1,bv);
+            stm.setLong(2,oaMessage.getMid());
+
+            ResultSet resultSet = stm.executeQuery();
+            if(resultSet.next()){
+                boolean is = resultSet.getBoolean(1);
+                return is;
+            }
+
+            return false;
+
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+}
+
+    /**
+     * AC
+     * */
+    public boolean collectVideo(AuthInfo auth, String bv){
+        //check OA
+        OAMessage oaMessage = checkAuthInvalid(auth);
+        if(!oaMessage.isAuthIsValid()){
+//            log.info("search video OA failed");
+            return false;
+        }
+        VideoMessage videoMessage = GetVideoMessage(bv);
+        if(videoMessage == null){
+//            log.info("no v");
+            return false;}
+
+        if(videoMessage.getOwnerMid()==oaMessage.getMid()){log.info("himself");return false;}
+
+        if(videoMessage.getPublicTime().equals(null) || videoMessage.getPublicTime() ==null ){return false;}
+        Timestamp d = new Timestamp(System.currentTimeMillis());
+        if(videoMessage.getPublicTime().after(d) && !oaMessage.getIdentity().toLowerCase().equals("superuser")){
+            log.info("can not see");return false;
+        }
+
+        String select = "SELECT insert_or_delete_user_collect_video(?, ?);";
+        try( var con = dataSource.getConnection();
+             PreparedStatement stm = con.prepareStatement(select);){
+            stm.setString(1,bv);
+            stm.setLong(2,oaMessage.getMid());
+
+            ResultSet resultSet = stm.executeQuery();
+            if(resultSet.next()){
+                boolean is = resultSet.getBoolean(1);
+                return is;
+            }
+
+            return false;
+
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     public VideoMessage GetVideoMessage(String bv){
         String GetBv = "(select * from b_video where bv = ?)";
-        try( var con = dataSource.getSQLConnection();
+        try( var con = dataSource.getConnection();
              PreparedStatement stm = con.prepareStatement(GetBv);){
             stm.setString(1,bv);
             ResultSet resultSet = stm.executeQuery();
@@ -463,7 +583,6 @@ public class VideoServiceImpl implements VideoService {
     }
 
 
-
     public OAMessage checkAuthInvalid(AuthInfo auth){
 
 
@@ -471,8 +590,8 @@ public class VideoServiceImpl implements VideoService {
         if(auth.getMid()<=0){//don't have mid
             if(auth.getPassword()==null){//don't have password
                 if(auth.getQq()!=null && auth.getWechat()!=null){ //2A
-                    try(Connection con = dataSource.getSQLConnection()) {
-//                        Connection con = dataSource.getSQLConnection();
+                    try(Connection con = dataSource.getConnection()) {
+//                        Connection con = dataSource.getConnection()();
                         String Auth2A = "SELECT * from b_user where qq = ? and wechat= ?  ";
                         PreparedStatement stmt = con.prepareStatement(Auth2A);
                         stmt.setString(1,auth.getQq());
@@ -480,6 +599,8 @@ public class VideoServiceImpl implements VideoService {
 
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
 
                     } catch (SQLException e) {
@@ -487,27 +608,31 @@ public class VideoServiceImpl implements VideoService {
                     }
                 }
                 if(auth.getQq()!=null && auth.getWechat()==null){//qq 1A
-                    try(Connection con = dataSource.getSQLConnection()){
-//                        Connection con = dataSource.getSQLConnection();
+                    try(Connection con = dataSource.getConnection()){
+//                        Connection con = dataSource.getConnection()();
                         String AuthA = "SELECT * from b_user where qq = ? ";
                         PreparedStatement stmt = con.prepareStatement(AuthA);
 
                         stmt.setString(1,auth.getQq());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;
                     }
                 }
                 if(auth.getQq()==null && auth.getWechat()!=null){
-                    try(Connection con = dataSource.getSQLConnection()) {
-//                        Connection con = dataSource.getSQLConnection();
+                    try(Connection con = dataSource.getConnection()) {
+//                        Connection con = dataSource.getConnection()();
                         String AuthA = "SELECT * from b_user where wechat = ?  ";
                         PreparedStatement stmt = con.prepareStatement(AuthA); //1A
                         stmt.setString(1, auth.getWechat());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;
@@ -520,8 +645,8 @@ public class VideoServiceImpl implements VideoService {
             }
             else {//has password
                 if(auth.getQq()!=null && auth.getWechat()!=null){ //3A
-                    try(Connection con = dataSource.getSQLConnection()) {
-//                        Connection con = dataSource.getSQLConnection();
+                    try(Connection con = dataSource.getConnection()) {
+//                        Connection con = dataSource.getConnection()();
                         String Auth3A = "SELECT * from b_user " +
                                 "where wechat = ? and qq = ? and password = ? ";
                         PreparedStatement stmt = con.prepareStatement(Auth3A);
@@ -533,14 +658,16 @@ public class VideoServiceImpl implements VideoService {
                         stmt.setString(3,auth.getPassword());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;
                     } catch (SQLException e) {
                         return message;
                     }
                 }
                 if(auth.getQq()==null && auth.getWechat()!=null){  //2A
-                    try(Connection con = dataSource.getSQLConnection()) {
-//                        Connection con = dataSource.getSQLConnection();
+                    try(Connection con = dataSource.getConnection()) {
+//                        Connection con = dataSource.getConnection()();
                         String Auth2A = "SELECT * from b_user " +
                                 "where wechat = ? and password =?  ";
                         PreparedStatement stmt = con.prepareStatement(Auth2A);
@@ -550,13 +677,15 @@ public class VideoServiceImpl implements VideoService {
                         stmt.setString(2,auth.getPassword());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;
                     } catch (SQLException e) {
                         return message;
                     }
                 }
                 if(auth.getQq()!=null && auth.getWechat()==null){//2A
-                    try(Connection con = dataSource.getSQLConnection()) {
+                    try(Connection con = dataSource.getConnection()) {
 
                         String Auth2A = "SELECT * from b_user " +
                                 "where qq = ? and password =? ";
@@ -567,6 +696,8 @@ public class VideoServiceImpl implements VideoService {
                         stmt.setString(2,auth.getPassword());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;
                     } catch (SQLException e) {
                         return message;
@@ -581,7 +712,7 @@ public class VideoServiceImpl implements VideoService {
         else {//HAVE MID
             if(auth.getPassword()==null){//don't have password
                 if(auth.getQq()!=null && auth.getWechat()!=null){//3A
-                    try(Connection con = dataSource.getSQLConnection()) {
+                    try(Connection con = dataSource.getConnection()) {
 
                         String Auth3A = "SELECT * from b_user " +
                                 "where mid = ? and wechat = ? and password =? ";
@@ -592,13 +723,15 @@ public class VideoServiceImpl implements VideoService {
                         stmt.setString(3,auth.getPassword());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;
                     }
                 }
                 if(auth.getQq()==null && auth.getWechat()!=null){//2A
-                    try(Connection con = dataSource.getSQLConnection()) {
+                    try(Connection con = dataSource.getConnection()) {
 
                         String Auth2A = "SELECT * from b_user " +
                                 "where mid = ? and wechat =? ";
@@ -609,13 +742,15 @@ public class VideoServiceImpl implements VideoService {
                         stmt.setString(2,auth.getWechat());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;
                     }
                 }
                 if(auth.getQq()!=null && auth.getWechat()==null){//2A
-                    try(Connection con = dataSource.getSQLConnection()) {
+                    try(Connection con = dataSource.getConnection()) {
 
                         String Auth2A = "SELECT * from b_user " +
                                 "where mid = ? and qq =? ";
@@ -626,6 +761,8 @@ public class VideoServiceImpl implements VideoService {
                         stmt.setString(2,auth.getQq());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;
@@ -636,7 +773,7 @@ public class VideoServiceImpl implements VideoService {
                 }
             }else {// have password
                 if(auth.getQq()!=null && auth.getWechat()!=null){//4A
-                    try(Connection con = dataSource.getSQLConnection()) {
+                    try(Connection con = dataSource.getConnection()) {
 //                        System.out.println("4A");
 
 
@@ -659,13 +796,15 @@ public class VideoServiceImpl implements VideoService {
 //                        System.out.println(1);
 //                        System.out.println(resultSet.toString());
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;
                     }
                 }
                 if(auth.getQq()==null && auth.getWechat()!=null){//3A
-                    try (Connection con = dataSource.getSQLConnection()) {
+                    try (Connection con = dataSource.getConnection()) {
 
                         String Auth3A = "SELECT * from b_user " +
                                 "where mid = ? and wechat =? and password =? ";
@@ -678,13 +817,15 @@ public class VideoServiceImpl implements VideoService {
                         stmt.setString(3,auth.getPassword());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;
                     }
                 }
                 if(auth.getQq()!=null && auth.getWechat()==null){//3A
-                    try (Connection con = dataSource.getSQLConnection()) {
+                    try (Connection con = dataSource.getConnection()) {
 
                         String Auth3A = "SELECT * from b_user " +
                                 "where mid = ? and qq =? and password=? ";
@@ -697,13 +838,15 @@ public class VideoServiceImpl implements VideoService {
                         stmt.setString(3,auth.getPassword());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;
                     }
                 }
                 if(auth.getQq()==null && auth.getWechat()==null){//2A
-                    try (Connection con = dataSource.getSQLConnection()) {
+                    try (Connection con = dataSource.getConnection()) {
 
                         String Auth2A = "SELECT * from b_user " +
                                 "where mid = ? and password =? ";
@@ -714,6 +857,8 @@ public class VideoServiceImpl implements VideoService {
                         stmt.setString(2,auth.getPassword());
                         ResultSet resultSet = stmt.executeQuery();
                         HasResultAndSet(message, resultSet);
+                        stmt.close();
+                        con.close();
                         return message;// don't have the person
                     } catch (SQLException e) {
                         return message;

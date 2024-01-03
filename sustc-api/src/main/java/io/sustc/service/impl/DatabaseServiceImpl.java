@@ -11,6 +11,7 @@ import org.springframework.asm.Type;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.Resource;
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -44,8 +45,11 @@ public class DatabaseServiceImpl implements DatabaseService {
      * provide you a well-configured instance of {@link DataSource}.
      * Learn more: <a href="https://www.baeldung.com/spring-dependency-injection">Dependency Injection</a>
      */
-    @Autowired
+    @Resource
     private DataSource dataSource;
+
+//    @Resource
+//    private DataSource dataSource2;
 
 //        private SQLDataSource dataSource;
 
@@ -90,11 +94,11 @@ public class DatabaseServiceImpl implements DatabaseService {
         List<Future<?>> futures = new ArrayList<>();
 
         log.info("ThreadPool Number:"+ThreadNum);
-        int proceedWatched = 6;
+
         Future<?> VideoRecord = executorService.submit(() -> InsertVideoRecord(videoRecords));
         futures.add(VideoRecord);
 
-
+        int proceedWatched = 3;
         for(int i=0;i<proceedWatched;i++){
             int finalI = i;
             Future<?> WatchRecord = executorService.submit
@@ -138,6 +142,14 @@ public class DatabaseServiceImpl implements DatabaseService {
             futures.add(UserFollow);
         }
 
+        int proceedCollected = 4;
+        for(int i=0;i<proceedCollected;i++){
+            int finalI = i;
+            Future<?> CollectRecord = executorService.submit
+                    (() -> InsertVideoCollect(videoRecords.subList(videoRecords.size() * finalI /proceedCollected,videoRecords.size()* (finalI+1)/proceedCollected)));
+            futures.add(CollectRecord);
+        }
+
         int proceedVideoLike = 4;
         for(int i=0;i<proceedVideoLike;i++){
             int finalI = i;
@@ -150,13 +162,7 @@ public class DatabaseServiceImpl implements DatabaseService {
 
 
 
-        int proceedCollected = 4;
-        for(int i=0;i<proceedCollected;i++){
-            int finalI = i;
-            Future<?> CollectRecord = executorService.submit
-                    (() -> InsertVideoCollect(videoRecords.subList(videoRecords.size() * finalI /proceedCollected,videoRecords.size()* (finalI+1)/proceedCollected)));
-            futures.add(CollectRecord);
-        }
+
 
 
         // 等待所有任务执行完毕
@@ -171,9 +177,17 @@ public class DatabaseServiceImpl implements DatabaseService {
 
         log.info("All Thread Publish");
 
+//        String sb = "select pg_terminate_backend(pid) from pg_stat_activity where state='idle';";
+//        try(Connection con = dataSource.getConnection();
+//        PreparedStatement pre = con.prepareStatement(sb)){
+//            pre.executeUpdate();
+//        } catch (SQLException e) {
+//            throw new RuntimeException(e);
+//        }
+
 //        List<?> small = ;
 //        List<?> back  = ;
-        //TODO: gb import your data!!!
+        //DONE: gb import your data!!!
 
 //        throw new RuntimeException();
     }
@@ -254,6 +268,7 @@ public class DatabaseServiceImpl implements DatabaseService {
             con.close();
             log.info("Insert USER_like_Danmu success");
         } catch (SQLException e) {
+            log.info(e.toString());
             log.info("批量插入 USER_like_Danmu 可能没有数据");
 //            throw new RuntimeException(e);
         }
@@ -304,6 +319,7 @@ public class DatabaseServiceImpl implements DatabaseService {
             con.close();
             log.info("insert video success");
         }catch (SQLException e){
+            log.info(e.toString());
             log.info("批量插入 Video 可能没有数据");
             return;
 
@@ -341,6 +357,7 @@ public class DatabaseServiceImpl implements DatabaseService {
             con.close();
             log.info("Insert Video_like success");
         } catch (SQLException e) {
+            log.info(e.toString());
 //            throw new RuntimeException(e);
             log.info("批量插入 USER_like_Video 可能没有数据");
             return;
@@ -378,6 +395,7 @@ public class DatabaseServiceImpl implements DatabaseService {
             con.close();
             log.info("Insert Coin_Video success");
         } catch (SQLException e) {
+            log.info(e.toString());
 //            throw new RuntimeException(e);
             log.info("批量插入 Coin_Video 可能没有数据");
         }
@@ -392,7 +410,7 @@ public class DatabaseServiceImpl implements DatabaseService {
         try (Connection con= dataSource.getConnection();
         PreparedStatement stmt =con.prepareStatement(InsertUserCollect)
         ) {
-            con.setAutoCommit(false);
+//            con.setAutoCommit(false);
 
             long i = 1;
 
@@ -416,6 +434,7 @@ public class DatabaseServiceImpl implements DatabaseService {
             con.close();
             log.info("Insert Collect_Video success");
         } catch (SQLException e) {
+            log.info(e.toString());
 //            throw new RuntimeException(e);
             log.info("批量插入 Collect_Video 可能没有数据");
         }
@@ -455,6 +474,7 @@ public class DatabaseServiceImpl implements DatabaseService {
             con.close();
             log.info("Insert USER_Watch_Video Success");
         } catch (SQLException e) {
+            log.info(e.toString());
 //            throw new RuntimeException(e);
             log.info("批量插入 USER_Watch_Video 可能没有数据");
         }
@@ -530,6 +550,7 @@ public class DatabaseServiceImpl implements DatabaseService {
             log.info("Inserting USER success");
 
         }catch (SQLException e){
+            log.info(e.toString());
 //            throw new RuntimeException(e);
             log.info("批量插入 USER 可能没有数据");
         }
@@ -569,6 +590,7 @@ public class DatabaseServiceImpl implements DatabaseService {
             con.close();
             log.info("Insert USER_Follow Success");
         } catch (SQLException e) {
+            log.info(e.toString());
 //            throw new RuntimeException(e);
             log.info("批量插入 USER_Follow 可能没有数据");
         }
